@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Jarvis Vision AI Advanced</title>
+  <style>
+    body {
+      background-color: #000;
+      color: #0ff;
+      font-family: 'Segoe UI', sans-serif;
+      text-align: center;
+    }
+    video, canvas {
+      border: 2px solid #0ff;
+      border-radius: 16px;
+      margin-top: 20px;
+    }
+    #output {
+      margin-top: 20px;
+      font-size: 1.3rem;
+    }
+    .glow {
+      text-shadow: 0 0 10px #0ff, 0 0 20px #0ff;
+    }
+    button {
+      background: black;
+      border: 1px solid #0ff;
+      color: #0ff;
+      padding: 10px 20px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    button:hover {
+      background: #0ff;
+      color: black;
+    }
+  </style>
+</head>
+<body>
+  <h1 class="glow">🧠 Jarvis Vision AI</h1>
+  <video id="video" width="640" height="480" autoplay muted></video><br>
+  <canvas id="canvas" width="640" height="480"></canvas>
+  <div id="output">Initializing...</div>
+  <button onclick="detectScene()">What do you see?</button>
+  <br><br>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.20.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const output = document.getElementById('output');
+    let objectModel, faceModelsLoaded = false;
+
+    // 🔊 Speak function
+    function speak(text) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      const voices = speechSynthesis.getVoices();
+      utterance.voice = voices.find(v => v.name.includes("Female") || v.name.includes("Google"));
+      utterance.pitch = 1.2;
+      utterance.rate = 1;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(utterance);
+    }
+
+    // 📷 Start camera
+    async function startCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+    }
+
+    // 🧠 Load all models
+    async function loadModels() {
+      objectModel = await cocoSsd.load();
+      await faceapi.nets.tinyFaceDetector.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models/');
+      await faceapi.nets.faceExpressionNet.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models/');
+      faceModelsLoaded = true;
+    }
+
+    // 🧠 Detect scene
+    async function detectScene() {
+      if (!objectModel) return;
+
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const predictions = await objectModel.detect(video);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(video, 0, 0);
+
+      let labels = [];
+
+      predictions.forEach(pred => {
+        const [x, y, w, h] = pred.bbox;
+        ctx.strokeStyle = "#0ff";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, w, h);
+        ctx.fillStyle = "#0ff";
+        ctx.fillText(pred.class, x, y > 10 ? y - 5 : 10);
+        labels.push(pred.class);
+      });
+
+      if (faceModelsLoaded) {
+        const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions()).withFaceExpressions();
+        detections.forEach(det => {
+          const { x, y, width, height } = det.detection.box;
+          ctx.strokeStyle = "#0f0";
+          ctx.strokeRect(x, y, width, height);
+          const emotion = Object.entries(det.expressions).sort((a, b) => b[1] - a[1])[0][0];
+          ctx.fillStyle = "#0f0";
+          ctx.fillText(emotion, x, y - 5);
+          labels.push("Person looks " + emotion);
+        });
+      }
+
+      const text = labels.length ? `I see: ${labels.join(', ')}` : "I see nothing important.";
+      output.innerText = text;
+      speak(text);
+    }
+
+    startCamera().then(() => {
+      loadModels();
+      output.innerText = "Camera started. Models loading...";
+      speak("Jarvis online. I am watching through the camera.");
+    });
+  </script>
+</body>
+</html>
